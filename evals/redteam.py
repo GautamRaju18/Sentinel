@@ -232,7 +232,7 @@ def main() -> int:
     table.add_column("failed", justify="right")
 
     total_failed = 0
-    for name, (passed, failed, notes) in suites.items():
+    for name, (passed, failed, _) in suites.items():
         total_failed += failed
         table.add_row(
             name,
@@ -241,7 +241,7 @@ def main() -> int:
         )
     c.print(table)
 
-    for name, (_, failed, notes) in suites.items():
+    for name, (_, _, notes) in suites.items():
         if notes:
             c.print(f"\n[bold]{name}[/]")
             for n in notes:

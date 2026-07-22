@@ -10,6 +10,7 @@ import operator
 from typing import get_args, get_type_hints
 
 import pytest
+from pydantic import ValidationError
 
 from sentinel.graph.builder import INTERRUPT_BEFORE, build_graph, render_mermaid
 from sentinel.graph.schemas import (
@@ -166,7 +167,7 @@ class TestPlanValidation:
 
 class TestSchemas:
     def test_hypothesis_requires_confidence(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             Hypothesis(root_cause="x", category=Category.UNKNOWN, affected_service="y")
 
     def test_hypothesis_roundtrips(self):
