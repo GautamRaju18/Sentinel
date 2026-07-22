@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        # No --extra train: torch is a multi-GB download and nothing under test
+        # imports it. The training scripts are exercised by their own job below.
+        run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Unit tests
+        # These must not need a database, an LLM, or a network. Anything that
+        # does belongs in the integration job.
+        run: uv run pytest tests/ -q
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+
+      - name: Red-team suite
+        # Guardrails are the part of this system that must never regress
+        # silently, so a failure here fails the build.
+        run: uv run python evals/redteam.py
+
+      - name: Verify no secrets are committed
+        run: |
+          if git ls-files | grep -E '^\.env$'; then
+            echo "::error::.env is tracked by git"
+            exit 1
+          fi
+          # Match realistic token LENGTHS, not just prefixes. A bare `ghp_`
+          # pattern also matches the redaction regexes in guardrails.py and the
+          # fixtures in the red-team suite, which are the code that protects
+          # against this — flagging them trains everyone to ignore the check.
+          if git grep -nE '(sk-or-v1-[a-f0-9]{32}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50}|hf_[A-Za-z0-9]{30})' \
+              -- ':!*.example'; then
+            echo "::error::a real credential appears to be committed"
+            exit 1
+          fi
+          echo "no secrets found"
+
+  dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+
+      - name: Dataset generation is reproducible
+        # A dataset that drifts between runs makes every eval number
+        # incomparable to the last one.
+        run: |
+          uv run python finetune/generate_dataset.py
+          sha256sum finetune/data/train.jsonl > /tmp/first
+          rm -rf finetune/data
+          uv run python finetune/generate_dataset.py
+          sha256sum finetune/data/train.jsonl > /tmp/second
+          diff /tmp/first /tmp/second && echo "dataset is deterministic"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: sentinel:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image starts and serves /health
+        run: |
+          docker run -d --name sentinel-ci -p 8000:8000 \
+            -e DATABASE_URL=postgresql://sentinel:sentinel@localhost:5433/sentinel \
+            sentinel:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health; then
+              echo "healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::container did not become healthy"
+          docker logs sentinel-ci
+          exit 1
+
+      - name: Runs as non-root
+        run: |
+          user=$(docker run --rm sentinel:ci whoami)
+          [ "$user" = "sentinel" ] || { echo "::error::running as $user"; exit 1; }
+          echo "running as $user"
