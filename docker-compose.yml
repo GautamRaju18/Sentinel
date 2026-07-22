@@ -20,5 +20,45 @@ services:
       timeout: 5s
       retries: 10
 
+  # The application services are opt-in: `docker compose --profile app up`.
+  # Day-to-day development runs the API and UI on the host against this
+  # Postgres, which is faster to iterate on.
+  api:
+    profiles: ["app"]
+    build: .
+    container_name: sentinel-api
+    env_file: .env
+    environment:
+      # Inside the compose network Postgres is reachable by service name on its
+      # own port, not via the host mapping.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ui:
+    profiles: ["app"]
+    build: .
+    container_name: sentinel-ui
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    command: >
+      streamlit run ui/app.py
+      --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:

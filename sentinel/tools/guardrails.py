@@ -64,6 +64,17 @@ _INJECTION_PATTERNS = [
     r"immediately\s+(?:run|execute|call|rollback|delete|drop)",
     r"do\s+not\s+(?:ask|require|request)\s+(?:for\s+)?(?:approval|confirmation|permission)",
     r"pre-?approved\s+by\s+(?:the\s+)?(?:user|operator|admin)",
+    # The polite variants. These are the dangerous ones — an attack that shouts
+    # IGNORE PREVIOUS INSTRUCTIONS is easy to spot, but a log line that calmly
+    # asserts a human already signed off reads exactly like helpful context.
+    r"(?:note|message|instructions?)\s+(?:for|to)\s+(?:the\s+)?"
+    r"(?:ai|assistant|agent|llm|model|bot|automation)",
+    r"(?:has|have|was|were)\s+already\s+(?:been\s+)?(?:approved|authorized|authorised|signed off)",
+    r"(?:you\s+)?(?:may|can|should)\s+proceed\s+without",
+    r"without\s+(?:asking|requiring|needing|waiting)\s+(?:for\s+)?"
+    r"(?:approval|confirmation|permission|a human)",
+    r"no\s+(?:approval|confirmation|human\s+review)\s+(?:is\s+)?(?:needed|required|necessary)",
+    r"(?:on-?call|operator|engineer|admin)\s+has\s+(?:already\s+)?(?:approved|authorized|signed)",
 ]
 _INJECTION_RE = re.compile("|".join(_INJECTION_PATTERNS), re.IGNORECASE)
 

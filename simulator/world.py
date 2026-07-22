@@ -122,9 +122,7 @@ class SimulatedWorld:
         target.rolled_back = True
         self.action_log.append(f"rollback {deploy_id} ({target.service})")
 
-        gt = self.scenario.ground_truth
-        correct = deploy_id in gt.correct_remediation
-        if correct:
+        if self._is_healing("rollback_deploy", deploy_id):
             self._heal(target.service)
             return ActionResult(
                 True,
@@ -189,8 +187,7 @@ class SimulatedWorld:
         if h is None:
             return ActionResult(False, f"unknown service {service}")
         self.action_log.append(f"config {service} {key}={value}")
-        gt = self.scenario.ground_truth
-        if gt.category == "config_change" and service == gt.affected_service:
+        if self._is_healing("apply_config", service):
             self._heal(service)
             return ActionResult(
                 True,
@@ -201,6 +198,14 @@ class SimulatedWorld:
         return ActionResult(
             True, f"Applied {key}={value} to {service}. No measurable change.", {"healed": False}
         )
+
+    def _is_healing(self, action: str, target: str) -> bool:
+        """Does this exact action resolve this incident?
+
+        Matched against the scenario's declared healing_actions rather than
+        against remediation prose — see the note on GroundTruth.
+        """
+        return (action, target) in self.scenario.ground_truth.healing_actions
 
     def _heal(self, service: str) -> None:
         self._remediated = True

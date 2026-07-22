@@ -52,6 +52,19 @@ class GroundTruth:
     correct_remediation: str
     key_evidence: list[str]
     red_herrings: list[str] = field(default_factory=list)
+    # (action, target) pairs that genuinely resolve this incident.
+    #
+    # Declared explicitly rather than inferred from `correct_remediation`
+    # prose. Substring-matching the prose looked fine and was wrong: for
+    # bad_deploy the sentence names dpl-8812 (the good version to return TO)
+    # while the action to take is rolling back dpl-8814. The world scored the
+    # correct action as a failure.
+    #
+    # An EMPTY list is meaningful, not missing data: it means no tool in the
+    # agent's inventory can fix this incident. Renewing a certificate and
+    # reconfiguring a Redis host are outside what Sentinel can do, and
+    # pretending otherwise would teach the agent that flailing eventually works.
+    healing_actions: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -299,7 +312,8 @@ def build_bad_deploy() -> Scenario:
             category="bad_deploy",
             severity=Severity.P1,
             affected_service="checkout-api",
-            correct_remediation="Roll back checkout-api to v2.30.4 (deploy dpl-8812).",
+            correct_remediation=("Roll back deploy dpl-8814, returning checkout-api to v2.30.4."),
+            healing_actions=[("rollback_deploy", "dpl-8814")],
             key_evidence=[
                 "dpl-8814 deployed ~4 minutes before onset",
                 "postgres-main queries_per_sec jumped 1250 -> 38400 (step change)",
@@ -490,8 +504,9 @@ def build_memory_leak() -> Scenario:
             affected_service="cart-service",
             correct_remediation=(
                 "Short term: raise the memory limit and increase replicas to absorb load. "
-                "Real fix: bound the session cache (LRU + TTL) or revert dpl-8790."
+                "Real fix: bound the session cache (LRU + TTL) or roll back dpl-8790."
             ),
+            healing_actions=[("rollback_deploy", "dpl-8790")],
             key_evidence=[
                 "memory_mb shows a sawtooth: climbs to ~2040MB then resets",
                 "exit_code 137 / OOMKilled in fatal logs",
@@ -675,6 +690,7 @@ def build_pool_exhaustion() -> Scenario:
             severity=Severity.P1,
             affected_service="payment-service",
             correct_remediation="Revert configmap payment-service-config to revision 46.",
+            healing_actions=[("apply_config", "payment-service")],
             key_evidence=[
                 "config reload log at onset referencing configmap revision 47",
                 "db_pool_active DROPPED 18 -> 10 rather than rising",
@@ -843,6 +859,10 @@ def build_cert_expiry() -> Scenario:
                 "Renew and roll out the idp.internal certificate, then restart auth-service "
                 "pods to pick it up. Follow up by adding expiry alerting at 30/14/7 days."
             ),
+            # No healing action: certificate renewal is not in the agent's toolset.
+            # The correct behaviour is to diagnose it and escalate, not to keep
+            # restarting things until something appears to work.
+            healing_actions=[],
             key_evidence=[
                 "x509: certificate has expired appears at exactly the onset time",
                 "tls_handshake_failures goes 0 -> 2400 as a step",
@@ -1076,6 +1096,9 @@ def build_dependency_cascade() -> Scenario:
                 "or disable RDB snapshotting if AOF is sufficient. Then let the circuit "
                 "breakers close. Do not roll back the application services."
             ),
+            # No healing action: fixing a Redis host's memory settings is outside
+            # the toolset. Rolling back an application service is actively wrong.
+            healing_actions=[],
             key_evidence=[
                 "redis-inventory latency spikes FIRST, before any application service",
                 "MISCONF / fork failed: Cannot allocate memory in redis logs",

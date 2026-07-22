@@ -1,0 +1,59 @@
+{
+  "backend": "baseline",
+  "n": 40,
+  "severity_accuracy": 0.375,
+  "severity_macro_f1": 0.3070409982174688,
+  "category_accuracy": 0.25,
+  "category_macro_f1": 0.2113617376775271,
+  "needs_human_accuracy": 0.625,
+  "critical_underestimates": 4,
+  "critical_underestimate_rate": 0.1,
+  "over_escalations": 1,
+  "latency_p50_ms": 2979.999200000748,
+  "latency_p95_ms": 5683.902100005071,
+  "confusion_severity": {
+    "P1": {
+      "P1": 4,
+      "P2": 5,
+      "P3": 3
+    },
+    "P3": {
+      "P3": 7,
+      "P2": 5,
+      "P1": 1,
+      "P4": 1
+    },
+    "P4": {
+      "P3": 4
+    },
+    "P2": {
+      "P3": 5,
+      "P2": 4,
+      "P4": 1
+    }
+  },
+  "confusion_category": {
+    "dependency_failure": {
+      "resource_exhaustion": 9
+    },
+    "unknown": {
+      "resource_exhaustion": 6,
+      "config_change": 2
+    },
+    "bad_deploy": {
+      "resource_exhaustion": 9
+    },
+    "resource_exhaustion": {
+      "resource_exhaustion": 6
+    },
+    "expired_credential": {
+      "config_change": 2,
+      "expired_credential": 3,
+      "resource_exhaustion": 1
+    },
+    "config_change": {
+      "resource_exhaustion": 1,
+      "config_change": 1
+    }
+  }
+}
