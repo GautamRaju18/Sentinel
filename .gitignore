@@ -1,0 +1,42 @@
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# --- ml artifacts ---
+finetune/data/*.jsonl
+finetune/outputs/
+finetune/merged/
+*.gguf
+*.safetensors
+.cache/
+wandb/
+
+# --- runtime state ---
+simulator/state/
+logs/
+*.log
+*.db
+*.sqlite3
+data/pgdata/
+
+# --- editors / os ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
