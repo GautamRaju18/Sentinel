@@ -18,6 +18,14 @@ uv run --extra train python finetune/train_qlora.py
 ```
 QLoRA on Qwen2.5-1.5B-Instruct. ~30 minutes on a 6GB RTX 3060.
 
+> **On the development machine this does not work, and the supported path is
+> [`colab_train.ipynb`](colab_train.ipynb).** Windows Smart App Control blocks
+> the CUDA build of PyTorch — `torch/lib/shm.dll` and its dependencies are
+> unsigned, so `import torch` fails with `WinError 4551`. The CPU wheel loads
+> fine but would turn 30 minutes into an overnight run. Disabling Smart App
+> Control on Windows 11 is irreversible without reinstalling the OS, so it was
+> not done. The notebook uses identical hyperparameters on a free T4.
+
 ```bash
 uv run --extra train python finetune/export_ollama.py
 ```

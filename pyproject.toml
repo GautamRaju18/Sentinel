@@ -65,17 +65,18 @@ train = [
 [project.scripts]
 sentinel = "sentinel.cli:app"
 
-# PyPI's default torch wheel on Windows is CPU-only, which silently turns a
-# 30-minute QLoRA run into an overnight one. Pin the CUDA index explicitly.
-# `explicit = true` means nothing is fetched from here unless it is named in
-# [tool.uv.sources], so the default install is unaffected.
-[[tool.uv.index]]
-name = "pytorch-cu126"
-url = "https://download.pytorch.org/whl/cu126"
-explicit = true
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+# NOTE ON TORCH: the `train` extra installs the default PyPI torch wheel, which
+# is CPU-only on Windows. That is deliberate rather than an oversight.
+#
+# Pinning the CUDA index here was tried and reverted. The CUDA wheel installs
+# fine but will not import on the development machine — Windows Smart App
+# Control blocks torch/lib/shm.dll and its unsigned dependencies, so `import
+# torch` fails outright and takes the rest of the project down with it. A
+# default that breaks `uv sync` is worse than a default that is merely slow.
+#
+# To train locally where Smart App Control permits it:
+#   uv pip install --reinstall torch --index-url https://download.pytorch.org/whl/cu126
+# Otherwise use finetune/colab_train.ipynb, which is the supported path.
 
 [build-system]
 requires = ["hatchling"]
@@ -87,6 +88,9 @@ packages = ["sentinel", "simulator"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Notebooks share state across cells, so ruff reports every name defined in an
+# earlier cell as undefined. The rule is right about modules and wrong here.
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
