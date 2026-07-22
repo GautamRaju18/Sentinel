@@ -9,7 +9,10 @@ import structlog
 
 
 def configure_logging(level: str = "INFO", json_logs: bool = False) -> None:
-    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
+    # stderr, never stdout. The MCP stdio transport owns stdout: a single log
+    # line written there corrupts the JSON-RPC framing and the client drops
+    # the message.
+    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=level)
 
     processors: list = [
         structlog.contextvars.merge_contextvars,

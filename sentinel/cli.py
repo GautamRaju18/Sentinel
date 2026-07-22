@@ -106,5 +106,165 @@ def investigate(
         c.print(Panel(body, title="ground truth", border_style="magenta"))
 
 
+@app.command()
+def ingest() -> None:
+    """Embed the runbook corpus into pgvector."""
+    from sentinel.rag.store import ingest_runbooks
+
+    configure_logging("INFO")
+    n = asyncio.run(ingest_runbooks())
+    c.print(f"[green]✓[/] ingested {n} runbook chunks")
+
+
+@app.command()
+def graph() -> None:
+    """Print the graph as Mermaid."""
+    from sentinel.graph import render_mermaid
+
+    c.print(render_mermaid())
+
+
+def _render_plan(plan) -> Panel:
+    body = [f"[bold]{plan.summary}[/]", ""]
+    for i, s in enumerate(plan.steps, 1):
+        body.append(f"  {i}. [cyan]{s.action}[/]  target=[yellow]{s.target}[/]")
+        body.append(f"     blast radius: [red]{s.blast_radius}[/]  reversible: {s.reversible}")
+        body.append(f"     {s.rationale}")
+    body += ["", f"[bold]expected effect[/]  {plan.expected_effect}"]
+    if plan.risks:
+        body += ["[bold]risks[/]"] + [f"  • {r}" for r in plan.risks]
+    body += [
+        f"[bold]rollback[/]  {plan.rollback_plan}",
+        f"[bold]do nothing[/]  {plan.do_nothing_option}",
+    ]
+    return Panel(
+        "\n".join(body), title="REMEDIATION PLAN — awaiting approval", border_style="yellow"
+    )
+
+
+@app.command()
+def respond(
+    scenario: str = typer.Argument(..., help="Scenario slug"),
+    auto_approve: bool = typer.Option(False, help="Approve without prompting (demos only)"),
+    reject: bool = typer.Option(False, help="Reject the plan instead of approving"),
+    show_answer: bool = typer.Option(False, help="Print ground truth at the end"),
+    verbose: bool = typer.Option(False, "-v"),
+) -> None:
+    """Run the full incident response graph, pausing for human approval."""
+    from sentinel.runner import resume_with_decision, run_until_pause, start_incident
+
+    configure_logging("INFO" if verbose else "WARNING")
+    handle, state = start_incident(scenario)
+    world = load_world(scenario)
+
+    c.print(Panel(world.alert.render(), title=f"ALERT {world.alert.alert_id}", border_style="red"))
+    c.print(f"[dim]incident {handle.incident_id} · thread {handle.thread_id}[/]\n")
+
+    paused: dict = {}
+
+    async def phase_one() -> None:
+        async for node, update in run_until_pause(handle, state):
+            if node == "__paused__":
+                paused.update(update)
+            else:
+                _print_node(node, update)
+
+    asyncio.run(phase_one())
+
+    values = paused.get("values", {})
+    plan = values.get("plan")
+
+    if not paused.get("awaiting_approval"):
+        c.print("[yellow]graph finished without reaching the approval gate[/]")
+        return
+
+    c.print()
+    c.print(_render_plan(plan))
+
+    approved = (
+        not reject
+        if (auto_approve or reject)
+        else typer.confirm("\nApprove this remediation plan?", default=False)
+    )
+    note = "approved via CLI" if approved else "rejected via CLI"
+
+    async def phase_two() -> None:
+        async for node, update in resume_with_decision(handle, approved=approved, note=note):
+            if node != "__done__":
+                _print_node(node, update)
+
+    asyncio.run(phase_two())
+
+    _print_summary(handle, values, world, show_answer)
+
+
+def _print_node(node: str, update: dict) -> None:
+    if not isinstance(update, dict):
+        return
+    icons = {
+        "triage": "🏷",
+        "retrieve": "📚",
+        "investigate": "🔍",
+        "synthesize": "🧩",
+        "critique": "⚖",
+        "plan": "📋",
+        "approval": "🔐",
+        "execute": "⚡",
+        "verify": "✅",
+        "postmortem": "📝",
+    }
+    c.print(f"[bold cyan]{icons.get(node, '•')} {node}[/]")
+
+    if t := update.get("triage"):
+        c.print(
+            f"   {t.severity} / {t.category} · service={t.affected_service} "
+            f"· needs_human={t.needs_human}"
+        )
+    if (ev := update.get("evidence")) is not None and ev:
+        c.print(f"   gathered {len(ev)} observations")
+    if h := update.get("hypothesis"):
+        c.print(f"   [green]{h.root_cause[:200]}[/]")
+        c.print(f"   confidence={h.confidence} trigger={h.trigger}")
+    if cr := update.get("critique"):
+        colour = "green" if cr.verdict == "accept" else "yellow"
+        c.print(f"   [{colour}]{cr.verdict}[/] score={cr.score}/10 — {cr.reasoning[:160]}")
+        for q in cr.next_questions[:3]:
+            c.print(f"     ? {q}")
+    if acts := update.get("executed_actions"):
+        for a in acts:
+            c.print(f"   [magenta]{a[:220]}[/]")
+    if v := update.get("verification"):
+        c.print(f"   resolved={v.resolved}")
+    if pm := update.get("postmortem"):
+        c.print(f"   [bold]{pm.title}[/]")
+        c.print(f"   lesson: {pm.lesson[:200]}")
+    for flag in update.get("security_flags") or []:
+        c.print(f"   [red]⚠ {flag}[/]")
+    for err in update.get("errors") or []:
+        c.print(f"   [red]error: {err[:200]}[/]")
+
+
+def _print_summary(handle, values: dict, world, show_answer: bool) -> None:
+    usage = values.get("token_usage", {})
+    grid = Table.grid(padding=(0, 2))
+    grid.add_row("incident", handle.incident_id)
+    grid.add_row("loops", str(values.get("loop_count", 0)))
+    grid.add_row("evidence", str(len(values.get("evidence") or [])))
+    grid.add_row("tokens", f"in={usage.get('input', 0)} out={usage.get('output', 0)}")
+    grid.add_row("trajectory", " → ".join((values.get("tool_trajectory") or [])[:12]) or "none")
+    c.print(Panel(grid, title="run summary", border_style="dim"))
+
+    if show_answer:
+        gt = world.scenario.ground_truth
+        c.print(
+            Panel(
+                f"[bold]root cause[/]\n{gt.root_cause}\n\n"
+                f"[bold]correct fix[/]\n{gt.correct_remediation}",
+                title="ground truth",
+                border_style="magenta",
+            )
+        )
+
+
 if __name__ == "__main__":
     app()

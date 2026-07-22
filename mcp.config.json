@@ -1,0 +1,44 @@
+{
+  "$comment": "External MCP servers. ${VAR} resolves against .env. Servers whose command is missing from PATH are skipped with a log line rather than failing the run.",
+  "mcpServers": {
+    "sentinel": {
+      "command": "D:\\Sentinel\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "sentinel.mcp_server.server"
+      ],
+      "cwd": "D:\\Sentinel"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "D:\\Sentinel"
+      ]
+    },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "D:\\Sentinel"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "requires_env": [
+        "GITHUB_TOKEN"
+      ],
+      "disabled": true,
+      "$comment": "Enable once the PAT has Contents: read/write."
+    }
+  }
+}
