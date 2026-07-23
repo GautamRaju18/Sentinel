@@ -24,8 +24,10 @@ exactly when fine-tuning is the right tool.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 from pathlib import Path
+from typing import Any
 
 DATA = Path(__file__).parent / "data"
 OUT = Path(__file__).parent / "outputs" / "triage-qwen1.5b-lora"
@@ -123,53 +125,80 @@ def main() -> None:
     model = get_peft_model(model, peft_config)
     model.print_trainable_parameters()
 
-    def to_text(rows: list[dict]) -> Dataset:
-        return Dataset.from_dict(
-            {"text": [tokenizer.apply_chat_template(r["messages"], tokenize=False) for r in rows]}
-        )
+    # TRL's SFT API has moved more than once: `max_seq_length` became
+    # `max_length`, and `DataCollatorForCompletionOnlyLM` was removed in favour
+    # of `assistant_only_loss`. Rather than pin one TRL version and rot, ask
+    # this installation what it actually accepts.
+    sft_params = set(inspect.signature(SFTConfig.__init__).parameters)
+    modern = "assistant_only_loss" in sft_params
 
-    config = SFTConfig(
-        output_dir=args.out,
-        num_train_epochs=args.epochs,
-        per_device_train_batch_size=args.batch,
-        gradient_accumulation_steps=args.accum,
-        gradient_checkpointing=True,
-        learning_rate=args.lr,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
-        logging_steps=10,
-        eval_strategy="steps",
-        eval_steps=50,
-        save_strategy="steps",
-        save_steps=100,
-        save_total_limit=2,
-        fp16=True,
-        optim="paged_adamw_8bit",  # paged optimiser survives 6GB spikes
-        max_seq_length=args.max_seq,
-        packing=False,  # packing would blur example boundaries for classification
-        dataset_text_field="text",
-        report_to=[],
-    )
+    kwargs: dict[str, Any] = {
+        "output_dir": args.out,
+        "num_train_epochs": args.epochs,
+        "per_device_train_batch_size": args.batch,
+        "gradient_accumulation_steps": args.accum,
+        "gradient_checkpointing": True,
+        "learning_rate": args.lr,
+        "lr_scheduler_type": "cosine",
+        "warmup_ratio": 0.03,
+        "logging_steps": 10,
+        "eval_strategy": "steps",
+        "eval_steps": 50,
+        "save_strategy": "steps",
+        "save_steps": 100,
+        "save_total_limit": 2,
+        "fp16": True,
+        "optim": "paged_adamw_8bit",  # paged optimiser survives 6GB spikes
+        # packing would blur example boundaries, which matters for classification
+        "packing": False,
+        "report_to": [],
+    }
+    kwargs["max_length" if "max_length" in sft_params else "max_seq_length"] = args.max_seq
+
+    if modern:
+        # Newer TRL applies the chat template itself and masks everything that
+        # is not an assistant turn — the same effect the old collator gave.
+        kwargs["assistant_only_loss"] = True
+        train_ds = Dataset.from_list([{"messages": r["messages"]} for r in train_rows])
+        eval_ds = Dataset.from_list([{"messages": r["messages"]} for r in val_rows])
+        print("completion-only loss: assistant_only_loss=True")
+    else:
+        kwargs["dataset_text_field"] = "text"
+
+        def to_text(rows: list[dict]) -> Dataset:
+            return Dataset.from_dict(
+                {
+                    "text": [
+                        tokenizer.apply_chat_template(r["messages"], tokenize=False) for r in rows
+                    ]
+                }
+            )
+
+        train_ds, eval_ds = to_text(train_rows), to_text(val_rows)
+
+    config = SFTConfig(**{k: v for k, v in kwargs.items() if k in sft_params})
 
     trainer = SFTTrainer(
         model=model,
         args=config,
-        train_dataset=to_text(train_rows),
-        eval_dataset=to_text(val_rows),
+        train_dataset=train_ds,
+        eval_dataset=eval_ds,
         processing_class=tokenizer,
     )
 
-    # Train on the assistant turn only. Without this the model spends most of
-    # its capacity learning to predict alert text that is always supplied.
-    try:
-        from trl import DataCollatorForCompletionOnlyLM
+    if not modern:
+        # Older TRL: mask the prompt with the collator instead. Without it the
+        # model spends most of its capacity learning to predict alert text it
+        # will always be given.
+        try:
+            from trl import DataCollatorForCompletionOnlyLM
 
-        trainer.data_collator = DataCollatorForCompletionOnlyLM(
-            response_template="<|im_start|>assistant\n", tokenizer=tokenizer
-        )
-        print("completion-only loss: enabled")
-    except Exception as e:
-        print(f"completion-only loss unavailable ({e}); training on full sequence")
+            trainer.data_collator = DataCollatorForCompletionOnlyLM(
+                response_template="<|im_start|>assistant\n", tokenizer=tokenizer
+            )
+            print("completion-only loss: collator")
+        except Exception as e:
+            print(f"completion-only loss unavailable ({e}); training on full sequence")
 
     trainer.train()
     trainer.save_model(args.out)
