@@ -399,8 +399,28 @@ def to_chat_format(row: dict, system: str) -> dict:
     }
 
 
+def load_triage_system() -> str:
+    """Read TRIAGE_SYSTEM without importing the `sentinel` package.
+
+    `from sentinel.agents.prompts import ...` looks harmless but executes
+    sentinel/agents/__init__.py on the way, which imports LangChain. This
+    script is pure data generation and needs nothing but the standard library
+    — and in a bare Colab runtime LangChain is not installed, so the plain
+    import fails before a single example is written.
+
+    Loading the module by file path skips the package __init__ entirely.
+    """
+    import importlib.util
+
+    path = Path(__file__).parent.parent / "sentinel" / "agents" / "prompts.py"
+    spec = importlib.util.spec_from_file_location("_sentinel_prompts", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.TRIAGE_SYSTEM
+
+
 def main() -> None:
-    from sentinel.agents.prompts import TRIAGE_SYSTEM
+    TRIAGE_SYSTEM = load_triage_system()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     splits = generate()
