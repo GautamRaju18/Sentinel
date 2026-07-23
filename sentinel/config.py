@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # --- integrations ---
     github_token: str = ""
     huggingface_token: str = ""
+    # Repository monitoring. Owner whose repos we watch, and an optional
+    # comma-separated allowlist (empty = every repo the token can see).
+    github_owner: str = "GautamRaju18"
+    github_watch: str = ""
 
     # --- safety rails ---
     # The investigate->reflect cycle is a loop in the graph; without a hard cap

@@ -137,6 +137,15 @@ with c5:
     )
     st.page_link("pages/5_System.py", label="Inspect system", icon="⚙️")
 
+c6, _, _ = st.columns(3)
+with c6:
+    st.markdown(
+        "**📦 Repositories**\n\n"
+        "The same idea on your real GitHub repos: health at a glance, alerts for "
+        "what needs attention, and CI-failure investigation by the agent."
+    )
+    st.page_link("pages/6_Repositories.py", label="Monitor repos", icon="📦")
+
 # --- the safety argument, stated plainly ---------------------------------
 
 st.divider()

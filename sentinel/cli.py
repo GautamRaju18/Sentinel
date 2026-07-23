@@ -125,6 +125,23 @@ def graph() -> None:
 
 
 @app.command()
+def repos(
+    alerts_only: bool = typer.Option(False, help="Only show repos needing attention"),
+    investigate: bool = typer.Option(False, help="Diagnose any failing CI run"),
+) -> None:
+    """Monitor your GitHub repositories — health, alerts, CI investigation."""
+    import subprocess
+    import sys
+
+    cmd = [sys.executable, "scripts/monitor_repos.py"]
+    if alerts_only:
+        cmd.append("--alerts-only")
+    if investigate:
+        cmd.append("--investigate")
+    raise SystemExit(subprocess.run(cmd).returncode)
+
+
+@app.command()
 def tracing() -> None:
     """Show LangSmith tracing status and recent runs."""
     from sentinel.config import get_settings

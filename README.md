@@ -79,6 +79,7 @@ uv run streamlit run ui/app.py
 | **Observability** | LangSmith traces, model routing, live service health |
 | **Knowledge** | hybrid retrieval playground — BM25 vs vector vs fused |
 | **System** | graph topology, guardrails, MCP servers, credential health |
+| **Repositories** | monitor your real GitHub repos — health, alerts, and CI-failure investigation by the agent |
 
 ### Other commands
 
@@ -89,6 +90,7 @@ uv run streamlit run ui/app.py
 | `python -m sentinel.cli graph` | Print the graph as Mermaid |
 | `python -m sentinel.cli routing` | Show which model each tier resolves to |
 | `python -m sentinel.cli tracing` | LangSmith tracing status + recent traces |
+| `python -m sentinel.cli repos` | GitHub repo health dashboard (add `--alerts-only`, `--investigate`) |
 | `python scripts/smoke_phase1.py` | Verify the whole stack is wired up |
 | `python evals/redteam.py` | Adversarial suite |
 | `python evals/triage_eval.py` | Score the triage classifier |
