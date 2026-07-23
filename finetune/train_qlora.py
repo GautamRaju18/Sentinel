@@ -58,6 +58,7 @@ def main() -> None:
     args = build_argparser().parse_args()
 
     import torch
+    import transformers
     from datasets import Dataset
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
     from transformers import (
@@ -75,6 +76,19 @@ def main() -> None:
     gpu = torch.cuda.get_device_properties(0)
     print(f"GPU: {gpu.name}  {gpu.total_memory / 1e9:.1f} GB")
 
+    # Precision follows the hardware. Anything below compute capability 8.0
+    # (the RTX 3060 is 8.6, a Colab T4 is 7.5) has no bf16 support, and fp16
+    # training over bf16 weights makes the GradScaler raise
+    # "_amp_foreach_non_finite_check_and_unscale_cuda not implemented for BFloat16".
+    use_bf16 = torch.cuda.is_bf16_supported()
+    dtype = torch.bfloat16 if use_bf16 else torch.float16
+    # transformers 5.x renamed `torch_dtype` to `dtype`. from_pretrained
+    # swallows unknown kwargs, so the wrong name fails SILENTLY and the model
+    # config's default wins — Qwen2.5 declares bfloat16, which is how this bug
+    # first appeared on a T4.
+    dtype_kw = "dtype" if int(transformers.__version__.split(".")[0]) >= 5 else "torch_dtype"
+    print(f"bf16 support: {use_bf16} -> {dtype} (passing `{dtype_kw}=`)")
+
     train_rows = load_jsonl(DATA / "train_chat.jsonl")
     val_rows = load_jsonl(DATA / "val_chat.jsonl")
     print(f"train={len(train_rows)}  val={len(val_rows)}")
@@ -87,7 +101,7 @@ def main() -> None:
     quant = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_compute_dtype=dtype,
         # Quantises the quantisation constants too — saves roughly 0.4 bits per
         # parameter, which is the difference between fitting and not at 6GB.
         bnb_4bit_use_double_quant=True,
@@ -97,10 +111,18 @@ def main() -> None:
         args.model,
         quantization_config=quant,
         device_map={"": 0} if not args.cpu_offload else "auto",
-        torch_dtype=torch.float16,
         trust_remote_code=True,
+        **{dtype_kw: dtype},
     )
     model.config.use_cache = False  # incompatible with gradient checkpointing
+
+    actual = next(p.dtype for p in model.parameters() if p.is_floating_point())
+    if actual != dtype:
+        raise SystemExit(
+            f"model loaded as {actual}, expected {dtype}. The dtype kwarg was ignored — "
+            f"check whether this transformers version wants `dtype` or `torch_dtype`."
+        )
+
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
 
     peft_config = LoraConfig(
@@ -123,6 +145,15 @@ def main() -> None:
         ],
     )
     model = get_peft_model(model, peft_config)
+
+    # Under fp16 the GradScaler unscales gradients, and it implements that only
+    # for fp32/fp16 — a bf16 adapter parameter makes it raise. fp32 adapters
+    # are better numerically anyway and cost a few MB at rank 16.
+    if not use_bf16:
+        for param in model.parameters():
+            if param.requires_grad:
+                param.data = param.data.to(torch.float32)
+
     model.print_trainable_parameters()
 
     # TRL's SFT API has moved more than once: `max_seq_length` became
@@ -147,7 +178,9 @@ def main() -> None:
         "save_strategy": "steps",
         "save_steps": 100,
         "save_total_limit": 2,
-        "fp16": True,
+        # Must match the dtype the model was actually loaded in.
+        "bf16": use_bf16,
+        "fp16": not use_bf16,
         "optim": "paged_adamw_8bit",  # paged optimiser survives 6GB spikes
         # packing would blur example boundaries, which matters for classification
         "packing": False,
