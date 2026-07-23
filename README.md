@@ -65,11 +65,20 @@ Then run a full incident response:
 uv run python -m sentinel.cli respond bad_deploy --show-answer
 ```
 
-Or open the operator console:
+Or open the operator console — a five-page Streamlit app:
 
 ```bash
 uv run streamlit run ui/app.py
 ```
+
+| page | what's there |
+|---|---|
+| **Overview** | headline results, the generalization caveat, what the system does |
+| **Incident Response** | run an incident live, approve or reject the plan |
+| **Evaluations** | held-out accuracy, generalization, red-team (runnable in-page) |
+| **Observability** | LangSmith traces, model routing, live service health |
+| **Knowledge** | hybrid retrieval playground — BM25 vs vector vs fused |
+| **System** | graph topology, guardrails, MCP servers, credential health |
 
 ### Other commands
 
