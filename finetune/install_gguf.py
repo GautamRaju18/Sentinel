@@ -83,8 +83,17 @@ def point_env_at(name: str) -> None:
 
 
 def smoke_test(name: str) -> bool:
-    """Ask it one alert before spending minutes on the full eval."""
+    """Ask it one alert before spending minutes on the full eval.
+
+    Uses the HTTP API, not `ollama run`. The CLI is a terminal renderer: it
+    interleaves spinner redraws and ANSI escapes into stdout, so the "JSON"
+    you capture contains control codes and duplicated fragments. On Windows it
+    additionally fails to decode as cp1252. The model was fine; the harness
+    was reading a rendered animation.
+    """
     import json
+
+    import httpx
 
     print("\nsmoke test …")
     alert = (
@@ -94,13 +103,23 @@ def smoke_test(name: str) -> bool:
         "restarts in the last hour: 7\n"
         "Containers terminating with exit code 137 (OOMKilled)."
     )
-    result = subprocess.run(
-        ["ollama", "run", name, f"Classify this alert:\n\n{alert}"],
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
-    raw = result.stdout.strip()
+    try:
+        response = httpx.post(
+            "http://localhost:11434/api/chat",
+            json={
+                "model": name,
+                "messages": [{"role": "user", "content": f"Classify this alert:\n\n{alert}"}],
+                "stream": False,
+                "options": {"temperature": 0},
+            },
+            timeout=180,
+        )
+        response.raise_for_status()
+        raw = response.json()["message"]["content"].strip()
+    except Exception as e:
+        print(f"  [FAIL] could not reach ollama: {type(e).__name__}: {e}")
+        return False
+
     print(f"  raw: {raw[:300]}")
     start, end = raw.find("{"), raw.rfind("}")
     if start == -1 or end == -1:

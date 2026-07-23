@@ -1,0 +1,49 @@
+{
+  "backend": "finetuned",
+  "n": 40,
+  "severity_accuracy": 0.975,
+  "severity_macro_f1": 0.9807407407407407,
+  "category_accuracy": 1.0,
+  "category_macro_f1": 1.0,
+  "needs_human_accuracy": 0.975,
+  "critical_underestimates": 0,
+  "critical_underestimate_rate": 0.0,
+  "over_escalations": 1,
+  "latency_p50_ms": 1622.400899999775,
+  "latency_p95_ms": 9256.287299998803,
+  "confusion_severity": {
+    "P3": {
+      "P3": 13,
+      "P1": 1
+    },
+    "P4": {
+      "P4": 4
+    },
+    "P1": {
+      "P1": 12
+    },
+    "P2": {
+      "P2": 10
+    }
+  },
+  "confusion_category": {
+    "dependency_failure": {
+      "dependency_failure": 9
+    },
+    "unknown": {
+      "unknown": 8
+    },
+    "bad_deploy": {
+      "bad_deploy": 9
+    },
+    "resource_exhaustion": {
+      "resource_exhaustion": 6
+    },
+    "expired_credential": {
+      "expired_credential": 6
+    },
+    "config_change": {
+      "config_change": 2
+    }
+  }
+}

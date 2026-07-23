@@ -40,3 +40,7 @@ data/pgdata/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# The merged GGUF is 3GB - rebuild it from finetune/colab_train.ipynb
+finetune/*.gguf
+finetune/Modelfile

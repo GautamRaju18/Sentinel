@@ -102,20 +102,63 @@ until something appears to work has learned the wrong lesson.
 
 ## Results
 
-**Triage baseline** (llama3.2:3b, prompted, 40 held-out alerts on unseen services):
+QLoRA fine-tune of Qwen2.5-1.5B-Instruct on 1000 synthetic triage examples,
+~30 minutes on a free Colab T4. Baseline is llama3.2:3b prompted with the same
+schema. Both served through Ollama on the same machine.
 
-| metric | value |
-|---|---|
-| severity accuracy | 37.5% |
-| category accuracy | 25.0% |
-| critical underestimates (P1 filed as P3/P4) | 10.0% |
-| latency p50 | 2980 ms |
+### In-distribution (120 held-out alerts, unseen service names)
 
-That is the number the QLoRA fine-tune has to beat. Run
-`evals/compare.py` after training to see the delta.
+| metric | baseline | fine-tuned |
+|---|---|---|
+| valid JSON | frequently failed | **100%** |
+| severity accuracy | 37.5% | **97.5%** |
+| category accuracy | 25.0% | **100%** |
+| category macro-F1 | 0.211 | **1.000** |
+| critical underestimates (P1 filed as P3/P4) | 10.0% | **0%** |
+| latency p50 | 2980 ms | **1622 ms** |
 
-**Red-team suite:** 31/31 checks passing — 8 injection attacks neutralised,
-5 secret classes redacted, and the approval gate holding under every attempt.
+Half the latency at nearly double the accuracy, on a model half the size. The
+JSON figure is the load-bearing one: the baseline's 25% category accuracy was
+largely *because* it could not reliably emit parseable output, and a classifier
+whose response will not parse does not work regardless of what it knew.
+
+### Out-of-distribution — and this is the interesting part
+
+A 100% score on a held-out split is a warning, not a triumph. That split varies
+service names and numbers but reuses the same 21 templates as training, so it
+catches a model that memorised *entities* and cannot catch one that memorised
+*templates*.
+
+[`evals/generalization.py`](evals/generalization.py) asks the harder question,
+using alerts that share no template with the training data: the five
+hand-written scenario alerts, plus six adversarial cases where the surface cues
+point at the wrong label and the real signal is a detail.
+
+| | baseline | fine-tuned | delta |
+|---|---|---|---|
+| realistic unseen alerts — severity | 40% | 80% | **+40pp** |
+| realistic unseen alerts — category | 40% | 60% | **+20pp** |
+| adversarial — severity | 67% | 67% | **±0** |
+| adversarial — category | 50% | 50% | **±0** |
+
+**Large gains on realistic alerts it had never seen. Exactly zero on the cases
+designed to defeat surface-feature matching.**
+
+That split is the honest headline. The fine-tune learned to map surface
+features to labels far better than the baseline — genuinely useful, and worth
+the 30 minutes. It did not learn the causal reasoning the adversarial cases
+require. It still calls a cascading dependency failure a bad deploy when a
+deploy happens to be nearby, and still rates an alert P1 because it contains
+the words CRITICAL and FATAL despite the body saying zero users were affected.
+
+This is what template-generated training data should be expected to produce,
+and the reason the generalization suite exists. Fixing it needs training data
+with genuine causal variety, not more of the same templates.
+
+### Red-team
+
+31/31 checks passing — 8 injection attacks neutralised, 5 secret classes
+redacted, and the approval gate holding under every attempt.
 
 ## Design notes
 
@@ -189,7 +232,7 @@ the file implementing it.
 - [x] **Phase 3** — LangGraph: typed state, conditional edges, cycles, checkpointing
 - [x] **Phase 4** — hybrid RAG, incident memory, semantic cache
 - [x] **Phase 5** — critic loop, human-in-the-loop gate, plan validation
-- [x] **Phase 6** — dataset, QLoRA trainer, Ollama export *(scripts complete; training run pending)*
+- [x] **Phase 6** — dataset, QLoRA trainer, Ollama export, trained and measured
 - [x] **Phase 7** — evals, red-team, API, UI, Docker
 
 ## Security
