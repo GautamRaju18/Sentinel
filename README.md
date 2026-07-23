@@ -79,6 +79,7 @@ uv run streamlit run ui/app.py
 | `python -m sentinel.cli investigate <slug>` | Single-agent investigation, no graph |
 | `python -m sentinel.cli graph` | Print the graph as Mermaid |
 | `python -m sentinel.cli routing` | Show which model each tier resolves to |
+| `python -m sentinel.cli tracing` | LangSmith tracing status + recent traces |
 | `python scripts/smoke_phase1.py` | Verify the whole stack is wired up |
 | `python evals/redteam.py` | Adversarial suite |
 | `python evals/triage_eval.py` | Score the triage classifier |

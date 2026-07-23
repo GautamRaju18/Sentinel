@@ -8,6 +8,20 @@ import sys
 import structlog
 
 
+def configure_observability(level: str = "INFO", json_logs: bool = False) -> None:
+    """One call to set up both local logging and remote tracing.
+
+    Bundled deliberately. Every entry point already calls configure_logging;
+    piggybacking tracing on it means a new entry point cannot forget to enable
+    tracing while remembering to enable logs.
+    """
+    configure_logging(level, json_logs)
+
+    from sentinel.observability import configure_tracing
+
+    configure_tracing()
+
+
 def configure_logging(level: str = "INFO", json_logs: bool = False) -> None:
     # stderr, never stdout. The MCP stdio transport owns stdout: a single log
     # line written there corrupts the JSON-RPC framing and the client drops

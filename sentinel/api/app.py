@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from sentinel.config import get_settings
-from sentinel.logging_setup import configure_logging, get_logger
+from sentinel.logging_setup import configure_observability as configure_logging
+from sentinel.logging_setup import get_logger
 from sentinel.models.router import describe_routing
 from sentinel.runner import (
     IncidentHandle,

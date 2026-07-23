@@ -142,6 +142,8 @@ implements it. If a row has no file, it is not done.
 | Provider fallback chains | `ChatOpenRouter.fallback_models` |
 | Token accounting | `usage_metadata` → `token_usage` in state |
 | Structured logging | [`logging_setup.py`](../sentinel/logging_setup.py) |
+| LangSmith tracing | [`sentinel/observability.py`](../sentinel/observability.py) |
+| Verifying tracing is live, not just configured | `observability.py:verify_tracing` |
 | Settings from environment | [`config.py`](../sentinel/config.py) |
 | HTTP API with SSE streaming | [`api/app.py`](../sentinel/api/app.py) |
 | Operator UI | [`ui/app.py`](../ui/app.py) |

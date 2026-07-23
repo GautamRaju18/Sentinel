@@ -11,7 +11,7 @@ from rich.table import Table
 
 from sentinel.agents import run_agent
 from sentinel.agents.prompts import INVESTIGATOR_SYSTEM
-from sentinel.logging_setup import configure_logging
+from sentinel.logging_setup import configure_observability as configure_logging
 from sentinel.models.router import ModelTier, describe_routing
 from sentinel.tools import get_tools
 from simulator.scenarios import list_scenarios
@@ -122,6 +122,56 @@ def graph() -> None:
     from sentinel.graph import render_mermaid
 
     c.print(render_mermaid())
+
+
+@app.command()
+def tracing() -> None:
+    """Show LangSmith tracing status and recent runs."""
+    from sentinel.config import get_settings
+    from sentinel.observability import configure_tracing, trace_url, verify_tracing
+
+    configure_tracing()
+    ok, detail = verify_tracing()
+    settings = get_settings()
+
+    body = [
+        f"enabled: {'[green]yes[/]' if ok else '[red]no[/]'}",
+        f"detail:  {detail}",
+        f"project: {settings.langsmith_project}",
+    ]
+    if ok:
+        body.append(f"dashboard: {trace_url()}")
+    c.print(Panel("\n".join(body), title="LangSmith tracing", border_style="cyan"))
+
+    if not ok:
+        c.print("[dim]To enable: set LANGSMITH_TRACING=true and LANGSMITH_API_KEY in .env[/]")
+        return
+
+    try:
+        from langsmith import Client
+
+        runs = list(
+            Client(api_key=settings.langsmith_api_key).list_runs(
+                project_name=settings.langsmith_project, limit=10
+            )
+        )
+    except Exception as e:
+        c.print(f"[yellow]could not list runs: {type(e).__name__}: {e}[/]")
+        return
+
+    if not runs:
+        c.print("[dim]no runs recorded yet — run an incident to generate traces[/]")
+        return
+
+    table = Table(title=f"recent traces ({len(runs)})")
+    table.add_column("name")
+    table.add_column("type", style="dim")
+    table.add_column("started", style="dim")
+    table.add_column("tokens", justify="right")
+    for r in runs:
+        total = getattr(r, "total_tokens", None)
+        table.add_row(str(r.name)[:34], str(r.run_type), str(r.start_time)[:19], str(total or "—"))
+    c.print(table)
 
 
 def _render_plan(plan) -> Panel:
