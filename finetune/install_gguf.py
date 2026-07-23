@@ -146,8 +146,19 @@ def main() -> None:
 
     print("\nrunning the held-out eval (this takes a few minutes) …")
     py = sys.executable
-    run([py, "evals/triage_eval.py", "--split", "test", "--limit", "40",
-         "--out", "evals/results_finetuned.json"], cwd=PROJECT_ROOT)
+    run(
+        [
+            py,
+            "evals/triage_eval.py",
+            "--split",
+            "test",
+            "--limit",
+            "40",
+            "--out",
+            "evals/results_finetuned.json",
+        ],
+        cwd=PROJECT_ROOT,
+    )
     print()
     run([py, "evals/compare.py"], cwd=PROJECT_ROOT)
 
