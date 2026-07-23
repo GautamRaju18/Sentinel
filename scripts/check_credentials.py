@@ -140,9 +140,13 @@ def check_postgres(url: str) -> tuple[str, str]:
             with conn.cursor() as cur:
                 cur.execute("SELECT extname FROM pg_extension WHERE extname='vector'")
                 has_vector = cur.fetchone() is not None
-        return ("OK", "connected · pgvector present") if has_vector else (
-            "WARN",
-            "connected but pgvector extension is missing",
+        return (
+            ("OK", "connected · pgvector present")
+            if has_vector
+            else (
+                "WARN",
+                "connected but pgvector extension is missing",
+            )
         )
     except Exception as e:
         return "FAIL", f"{type(e).__name__}: {str(e)[:80]}"
