@@ -100,6 +100,37 @@ class ThreadedCheckpointer(BaseCheckpointSaver):
         return await asyncio.to_thread(self._saver.put_writes, config, writes, task_id, *a)
 
 
+def _serde():
+    """Serializer that trusts this project's own schema types.
+
+    The state carries Pydantic models (Hypothesis, RemediationPlan, …). When
+    LangGraph reads them back from a checkpoint it warns that it is
+    deserializing an "unregistered" type, and a future version will refuse
+    outright. These types are ours, not attacker-controlled, so we allowlist
+    them — silencing the warning and making the forward-compatibility contract
+    deliberate rather than accidental.
+
+    The allowlist needs exact (module, typename) pairs; a module-only prefix is
+    accepted by the constructor but does NOT match at load time. So the pairs
+    are derived from the module by reflection rather than hand-listed, which
+    would silently miss every schema added later.
+    """
+    import inspect
+
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+    from pydantic import BaseModel
+
+    from sentinel.graph import schemas
+
+    mod = schemas.__name__
+    allow = [
+        (mod, name)
+        for name, obj in inspect.getmembers(schemas, inspect.isclass)
+        if obj.__module__ == mod and (issubclass(obj, BaseModel) or issubclass(obj, str))
+    ]
+    return JsonPlusSerializer(allowed_msgpack_modules=allow)
+
+
 def make_checkpointer():
     """Postgres-backed checkpointer, or an in-memory one if Postgres is down.
 
@@ -110,8 +141,11 @@ def make_checkpointer():
 
     url = get_settings().database_url
     try:
+        # serde belongs on the constructor, not from_conn_string, which only
+        # takes the connection string and a pipeline flag.
         cm = PostgresSaver.from_conn_string(url)
         saver = cm.__enter__()
+        saver.serde = _serde()
         saver.setup()
         log.info("checkpointer.postgres", url=url.split("@")[-1])
         return ThreadedCheckpointer(saver), cm
@@ -122,7 +156,7 @@ def make_checkpointer():
         # worse. Degrade loudly.
         log.error("checkpointer.postgres_failed", error=str(e))
         log.warning("checkpointer.fallback_memory", impact="checkpoints will not survive restart")
-        return MemorySaver(), None
+        return MemorySaver(serde=_serde()), None
 
 
 async def to_thread(fn, *args, **kwargs):
