@@ -115,6 +115,8 @@ implements it. If a row has no file, it is not done.
 | Gradient checkpointing, paged optimiser | `SFTConfig` |
 | Completion-only loss | `DataCollatorForCompletionOnlyLM` |
 | Adapter merge and GGUF export | [`finetune/export_ollama.py`](../finetune/export_ollama.py) |
+| Colab training notebook | [`finetune/colab_train.ipynb`](../finetune/colab_train.ipynb) |
+| One-command install of the trained model | [`finetune/install_gguf.py`](../finetune/install_gguf.py) |
 | Backend swap behind one interface | [`sentinel/triage.py`](../sentinel/triage.py) |
 
 ## Evaluation
@@ -126,8 +128,11 @@ implements it. If a row has no file, it is not done.
 | Domain-weighted error metric | `critical_underestimates` |
 | Confusion matrices | same file |
 | Baseline vs fine-tuned comparison | [`evals/compare.py`](../evals/compare.py) |
-| Adversarial evaluation | [`evals/redteam.py`](../evals/redteam.py) |
+| **Out-of-distribution / generalization eval** | [`evals/generalization.py`](../evals/generalization.py) |
+| Adversarial cases that defeat surface matching | `ADVERSARIAL` in the same file |
+| Adversarial security evaluation | [`evals/redteam.py`](../evals/redteam.py) |
 | Unit tests | [`tests/`](../tests/) |
+| Running CI locally | [`scripts/check.py`](../scripts/check.py) |
 
 ## Production concerns
 
